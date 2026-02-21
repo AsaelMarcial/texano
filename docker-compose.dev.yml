@@ -1,0 +1,43 @@
+version: "3.8"
+
+# ═══════════════════════════════════════════════════════════════
+#  docker-compose para DESARROLLO con hot-reload en ambos servicios
+#  Uso: docker-compose -f docker-compose.dev.yml up --build
+# ═══════════════════════════════════════════════════════════════
+
+services:
+  # ── Backend (FastAPI + hot-reload) ──
+  backend:
+    build: ./POS-Texano
+    container_name: pos-texano-backend-dev
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./POS-Texano:/app
+      - ./POS-Texano/uploads:/app/uploads
+    env_file:
+      - ./POS-Texano/.env
+    entrypoint: []
+    command: >
+      bash -c "alembic upgrade head &&
+               uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    restart: unless-stopped
+
+  # ── Frontend (Vite dev server + hot-reload) ──
+  frontend:
+    image: node:20-alpine
+    container_name: pos-texano-frontend-dev
+    working_dir: /app
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://backend:8000
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+

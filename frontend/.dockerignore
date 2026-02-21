@@ -1,0 +1,17 @@
+# Dependencias
+node_modules/
+dist/
+
+# Env
+.env
+.env.*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+

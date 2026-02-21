@@ -1,0 +1,35 @@
+version: "3.8"
+
+services:
+  # ════════════════════════════════════════════
+  #  Backend – FastAPI + Uvicorn
+  # ════════════════════════════════════════════
+  backend:
+    build: ./POS-Texano
+    container_name: pos-texano-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./POS-Texano:/app
+      - ./POS-Texano/uploads:/app/uploads
+    env_file:
+      - ./POS-Texano/.env
+    # Dev: override entrypoint para hot-reload
+    entrypoint: []
+    command: >
+      bash -c "alembic upgrade head &&
+               uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    restart: unless-stopped
+
+  # ════════════════════════════════════════════
+  #  Frontend – React + Nginx
+  # ════════════════════════════════════════════
+  frontend:
+    build: ./frontend
+    container_name: pos-texano-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+

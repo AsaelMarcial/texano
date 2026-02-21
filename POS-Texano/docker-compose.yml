@@ -1,0 +1,26 @@
+# ═══════════════════════════════════════════════════════════
+#  NOTA: Este archivo es solo para el backend de forma aislada.
+#  Para levantar backend + frontend juntos, usa el
+#  docker-compose.yml de la raíz del proyecto (../docker-compose.yml)
+# ═══════════════════════════════════════════════════════════
+version: "3.8"
+
+services:
+  backend:
+    build: .
+    container_name: pos-texano-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - ./uploads:/app/uploads
+    env_file:
+      - .env
+    # En desarrollo: override del entrypoint para hot-reload
+    entrypoint: []
+    command: >
+      bash -c "alembic upgrade head &&
+               uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    restart: unless-stopped
+
+
