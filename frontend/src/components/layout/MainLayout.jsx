@@ -38,7 +38,7 @@ export default function MainLayout() {
   }
 
   const filteredNav = navigation.filter(
-    (item) => !item.roles || item.roles.includes(user?.rol),
+    (item) => !item.roles || item.roles.some(r => r.toLowerCase() === user?.rol?.toLowerCase()),
   )
 
   const linkClasses = ({ isActive }) =>

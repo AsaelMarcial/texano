@@ -32,6 +32,14 @@ export default function OrdenesPage() {
   const [catSeleccionada, setCatSeleccionada] = useState('')
   const [numeroComensales, setNumeroComensales] = useState(1)
   const [comensalActivo, setComensalActivo] = useState(1)
+  const [persComensales, setPersComensales] = useState({}) // { 1: 'C/T', 2: 'N', ... }
+
+  const PERS_OPTIONS = [
+    { key: 'C/T', label: 'Con todo' },
+    { key: 'C/Ci', label: 'Solo cilantro' },
+    { key: 'C/Cb', label: 'Solo cebolla' },
+    { key: 'N', label: 'Natural' },
+  ]
 
   const fetchData = async () => {
     try {
@@ -59,6 +67,7 @@ export default function OrdenesPage() {
     setCatSeleccionada('')
     setNumeroComensales(1)
     setComensalActivo(1)
+    setPersComensales({})
     setModalOpen(true)
   }
 
@@ -75,7 +84,7 @@ export default function OrdenesPage() {
       }
       return {
         ...prev,
-        detalles: [...prev.detalles, { producto_id: producto.id, cantidad: 1, notas: '', comensal: comensalActivo, personalizacion: '', _nombre: producto.nombre, _precio: producto.precio }],
+        detalles: [...prev.detalles, { producto_id: producto.id, cantidad: 1, notas: '', comensal: comensalActivo, _nombre: producto.nombre, _precio: producto.precio }],
       }
     })
   }
@@ -97,42 +106,34 @@ export default function OrdenesPage() {
     }))
   }
 
-  const setPersonalizacion = (productoId, comensal, personalizacion) => {
-    setForm((prev) => ({
-      ...prev,
-      detalles: prev.detalles.map((d) =>
-        d.producto_id === productoId && d.comensal === comensal 
-          ? { ...d, personalizacion } 
-          : d
-      ),
-    }))
-  }
-
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (form.detalles.length === 0) { toast.error('Agrega al menos un producto'); return }
     setSaving(true)
     try {
-      // Guardamos los detalles con comensales solo para el ticket
-      const detallesParaTicket = form.detalles.map(d => ({...d}))
+      // Guardamos los detalles con comensales y personalización por persona para el ticket
+      const detallesParaTicket = form.detalles.map(d => ({...d, personalizacion: persComensales[d.comensal] || 'C/T'}))
       
       const payload = {
         mesa_id: form.mesa_id ? parseInt(form.mesa_id) : null,
         tipo: form.tipo,
         notas: form.notas || null,
         // NO enviamos numero_comensales ni comensal al backend
-        detalles: form.detalles.map((d) => ({ 
-          producto_id: d.producto_id, 
-          cantidad: d.cantidad, 
-          notas: [d.personalizacion, d.notas].filter(Boolean).join(' - ') || null,
-        })),
+        detalles: form.detalles.map((d) => {
+          const pers = persComensales[d.comensal] || 'C/T'
+          return { 
+            producto_id: d.producto_id, 
+            cantidad: d.cantidad, 
+            notas: [pers !== 'C/T' ? pers : '', d.notas].filter(Boolean).join(' - ') || null,
+          }
+        }),
       }
       const { data: nuevaOrden } = await createOrden(payload)
       toast.success(`Orden ${nuevaOrden.numero_orden} creada`)
 
       // Imprimir ticket de cocina automáticamente con info de comensales
       try {
-        printTicketOrden({...nuevaOrden, detallesParaTicket, numeroComensales})
+        printTicketOrden({...nuevaOrden, detallesParaTicket, numeroComensales, persComensales})
       } catch {
         // No bloquear si falla la impresión
       }
@@ -399,6 +400,12 @@ export default function OrdenesPage() {
                         ...prev,
                         detalles: prev.detalles.filter(d => d.comensal <= num),
                       }))
+                      // Limpiar personalizaciones de comensales eliminados
+                      setPersComensales(prev => {
+                        const next = { ...prev }
+                        Object.keys(next).forEach(k => { if (parseInt(k) > num) delete next[k] })
+                        return next
+                      })
                       if (comensalActivo > num) setComensalActivo(num)
                     }}
                     className="w-20 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-200 outline-none"
@@ -437,12 +444,31 @@ export default function OrdenesPage() {
                     if (itemsComensal.length === 0) return null
                     return (
                       <div key={numComensal} className="border-b border-gray-100 last:border-0">
-                        <div className="bg-gray-50 px-3 py-1.5 text-xs font-semibold text-gray-700 sticky top-0">
-                          Persona {numComensal}
+                        <div className="bg-gray-50 px-3 py-1.5 sticky top-0">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold text-gray-700">Persona {numComensal}</span>
+                            <div className="flex gap-1">
+                              {PERS_OPTIONS.map((opt) => (
+                                <button
+                                  key={opt.key}
+                                  type="button"
+                                  onClick={() => setPersComensales(prev => ({ ...prev, [numComensal]: opt.key }))}
+                                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                                    (persComensales[numComensal] || 'C/T') === opt.key
+                                      ? 'bg-texano-500 text-white'
+                                      : 'bg-white text-gray-500 hover:bg-gray-100 ring-1 ring-gray-200'
+                                  }`}
+                                  title={opt.label}
+                                >
+                                  {opt.key}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                         </div>
                         {itemsComensal.map((d, idx) => (
                           <div key={`${d.producto_id}-${numComensal}-${idx}`} className="p-2">
-                            <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center justify-between">
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-medium text-gray-900 truncate">{d._nombre}</p>
                                 <p className="text-xs text-gray-500">${parseFloat(d._precio).toFixed(2)} c/u</p>
@@ -455,23 +481,6 @@ export default function OrdenesPage() {
                                   <TrashIcon className="h-4 w-4" />
                                 </button>
                               </div>
-                            </div>
-                            {/* Botones de personalización */}
-                            <div className="grid grid-cols-2 gap-1 mt-1">
-                              {['', 'sin cebolla', 'sin cilantro', 'sencillo'].map((pers) => (
-                                <button
-                                  key={pers || 'todo'}
-                                  type="button"
-                                  onClick={() => setPersonalizacion(d.producto_id, d.comensal, pers)}
-                                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                                    d.personalizacion === pers
-                                      ? 'bg-texano-500 text-white'
-                                      : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
-                                  }`}
-                                >
-                                  {pers || 'Con todo'}
-                                </button>
-                              ))}
                             </div>
                           </div>
                         ))}

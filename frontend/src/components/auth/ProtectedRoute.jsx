@@ -6,7 +6,7 @@ export default function ProtectedRoute({ allowedRoles }) {
 
   if (!token) return <Navigate to="/login" replace />
 
-  if (allowedRoles && !allowedRoles.includes(user?.rol)) {
+  if (allowedRoles && !allowedRoles.some(r => r.toLowerCase() === user?.rol?.toLowerCase())) {
     return <Navigate to="/" replace />
   }
 

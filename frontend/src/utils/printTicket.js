@@ -89,19 +89,20 @@ export function printTicketOrden(orden) {
   let itemsHtml = ''
   
   if (orden.detallesParaTicket && orden.numeroComensales > 1) {
+    const persMap = orden.persComensales || {}
     for (let numComensal = 1; numComensal <= orden.numeroComensales; numComensal++) {
       const itemsComensal = orden.detallesParaTicket.filter(d => d.comensal === numComensal)
       if (itemsComensal.length === 0) continue
       
+      const pers = persMap[numComensal] || 'C/T'
       itemsHtml += `
-        <tr><td colspan="2" class="center bold mt" style="border-top: 1px dashed #000; padding-top: 4px;">═══ PERSONA ${numComensal} ═══</td></tr>
+        <tr><td colspan="2" class="center bold mt" style="border-top: 1px dashed #000; padding-top: 4px;">═══ P${numComensal} (${pers}) ═══</td></tr>
       `
       itemsComensal.forEach(d => {
-        const personalizacion = d.personalizacion ? ` [${d.personalizacion}]` : ''
         itemsHtml += `
           <tr>
             <td class="qty">${d.cantidad}x</td>
-            <td class="name">${d._nombre}${personalizacion}</td>
+            <td class="name">${d._nombre}</td>
           </tr>
           ${d.notas ? `<tr><td></td><td class="small">→ ${d.notas}</td></tr>` : ''}
         `
@@ -109,13 +110,17 @@ export function printTicketOrden(orden) {
     }
   } else {
     const detalles = orden.detallesParaTicket || orden.detalles || []
+    const persMap = orden.persComensales || {}
+    const pers = persMap[1] || ''
+    if (pers && pers !== 'C/T') {
+      itemsHtml += `<tr><td colspan="2" class="center bold mt" style="border-top: 1px dashed #000; padding-top: 4px;">(${pers})</td></tr>`
+    }
     detalles.forEach(d => {
-      const personalizacion = d.personalizacion ? ` [${d.personalizacion}]` : ''
       const nombre = d._nombre || d.producto_nombre || 'Producto #' + d.producto_id
       itemsHtml += `
         <tr>
           <td class="qty">${d.cantidad}x</td>
-          <td class="name">${nombre}${personalizacion}</td>
+          <td class="name">${nombre}</td>
         </tr>
         ${d.notas ? `<tr><td></td><td class="small">→ ${d.notas}</td></tr>` : ''}
       `

@@ -21,7 +21,7 @@ export const useAuthStore = create(
 
       hasRole: (...roles) => {
         const user = get().user
-        return user ? roles.includes(user.rol) : false
+        return user ? roles.some(r => r.toLowerCase() === user.rol?.toLowerCase()) : false
       },
     }),
     {
