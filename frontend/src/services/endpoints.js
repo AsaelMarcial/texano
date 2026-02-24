@@ -70,9 +70,11 @@ export const createPago = (data) => api.post('/pagos', data)
 export const getCortesCaja = (skip = 0, limit = 100) =>
   api.get('/cortes-caja', { params: { skip, limit } })
 export const getCorteCaja = (id) => api.get(`/cortes-caja/${id}`)
-export const createCorteCaja = (data) => api.post('/cortes-caja', data)
+export const getCorteAbierto = () => api.get('/cortes-caja/abierto')
+export const createCorteCaja = (data) => api.post('/cortes-caja/abrir', data)
 export const closeCorteCaja = (id, data) =>
-  api.put(`/cortes-caja/${id}/cerrar`, data)
+  api.post(`/cortes-caja/${id}/cerrar`, data)
+export const deleteCorteCaja = (id) => api.delete(`/cortes-caja/${id}`)
 
 /* ── Uploads ── */
 export const uploadImagen = (file) => {

@@ -26,10 +26,10 @@ function App() {
           <Route path="/productos" element={<ProductosPage />} />
           <Route path="/ordenes" element={<OrdenesPage />} />
           <Route path="/pagos" element={<PagosPage />} />
-          <Route path="/cortes-caja" element={<CorteCajaPage />} />
 
           {/* Solo Administrador */}
           <Route element={<ProtectedRoute allowedRoles={['Administrador']} />}>
+            <Route path="/cortes-caja" element={<CorteCajaPage />} />
             <Route path="/usuarios" element={<UsuariosPage />} />
           </Route>
         </Route>

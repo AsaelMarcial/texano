@@ -28,8 +28,10 @@ export default function OrdenesPage() {
   const [formPago, setFormPago] = useState({ metodo_pago: 'efectivo', monto_recibido: '' })
 
   // Form para nueva orden
-  const [form, setForm] = useState({ mesa_id: '', tipo: 'en_sitio', notas: '', detalles: [] })
+  const [form, setForm] = useState({ mesa_id: '', tipo: 'en_sitio', notas: '', numero_comensales: 1, detalles: [] })
   const [catSeleccionada, setCatSeleccionada] = useState('')
+  const [numeroComensales, setNumeroComensales] = useState(1)
+  const [comensalActivo, setComensalActivo] = useState(1)
 
   const fetchData = async () => {
     try {
@@ -53,42 +55,55 @@ export default function OrdenesPage() {
   useEffect(() => { fetchData() }, [filtroEstado])
 
   const openCreate = () => {
-    setForm({ mesa_id: '', tipo: 'en_sitio', notas: '', detalles: [] })
+    setForm({ mesa_id: '', tipo: 'en_sitio', notas: '', numero_comensales: 1, detalles: [] })
     setCatSeleccionada('')
+    setNumeroComensales(1)
+    setComensalActivo(1)
     setModalOpen(true)
   }
 
   const addItem = (producto) => {
     setForm((prev) => {
-      const existing = prev.detalles.find((d) => d.producto_id === producto.id)
+      const existing = prev.detalles.find((d) => d.producto_id === producto.id && d.comensal === comensalActivo)
       if (existing) {
         return {
           ...prev,
           detalles: prev.detalles.map((d) =>
-            d.producto_id === producto.id ? { ...d, cantidad: d.cantidad + 1 } : d
+            d.producto_id === producto.id && d.comensal === comensalActivo ? { ...d, cantidad: d.cantidad + 1 } : d
           ),
         }
       }
       return {
         ...prev,
-        detalles: [...prev.detalles, { producto_id: producto.id, cantidad: 1, notas: '', _nombre: producto.nombre, _precio: producto.precio }],
+        detalles: [...prev.detalles, { producto_id: producto.id, cantidad: 1, notas: '', comensal: comensalActivo, personalizacion: '', _nombre: producto.nombre, _precio: producto.precio }],
       }
     })
   }
 
-  const removeItem = (productoId) => {
+  const removeItem = (productoId, comensal) => {
     setForm((prev) => ({
       ...prev,
-      detalles: prev.detalles.filter((d) => d.producto_id !== productoId),
+      detalles: prev.detalles.filter((d) => !(d.producto_id === productoId && d.comensal === comensal)),
     }))
   }
 
-  const updateItemQty = (productoId, qty) => {
-    if (qty < 1) return removeItem(productoId)
+  const updateItemQty = (productoId, comensal, qty) => {
+    if (qty < 1) return removeItem(productoId, comensal)
     setForm((prev) => ({
       ...prev,
       detalles: prev.detalles.map((d) =>
-        d.producto_id === productoId ? { ...d, cantidad: qty } : d
+        d.producto_id === productoId && d.comensal === comensal ? { ...d, cantidad: qty } : d
+      ),
+    }))
+  }
+
+  const setPersonalizacion = (productoId, comensal, personalizacion) => {
+    setForm((prev) => ({
+      ...prev,
+      detalles: prev.detalles.map((d) =>
+        d.producto_id === productoId && d.comensal === comensal 
+          ? { ...d, personalizacion } 
+          : d
       ),
     }))
   }
@@ -98,18 +113,26 @@ export default function OrdenesPage() {
     if (form.detalles.length === 0) { toast.error('Agrega al menos un producto'); return }
     setSaving(true)
     try {
+      // Guardamos los detalles con comensales solo para el ticket
+      const detallesParaTicket = form.detalles.map(d => ({...d}))
+      
       const payload = {
         mesa_id: form.mesa_id ? parseInt(form.mesa_id) : null,
         tipo: form.tipo,
         notas: form.notas || null,
-        detalles: form.detalles.map((d) => ({ producto_id: d.producto_id, cantidad: d.cantidad, notas: d.notas || null })),
+        // NO enviamos numero_comensales ni comensal al backend
+        detalles: form.detalles.map((d) => ({ 
+          producto_id: d.producto_id, 
+          cantidad: d.cantidad, 
+          notas: [d.personalizacion, d.notas].filter(Boolean).join(' - ') || null,
+        })),
       }
       const { data: nuevaOrden } = await createOrden(payload)
       toast.success(`Orden ${nuevaOrden.numero_orden} creada`)
 
-      // Imprimir ticket de cocina automáticamente
+      // Imprimir ticket de cocina automáticamente con info de comensales
       try {
-        printTicketOrden(nuevaOrden)
+        printTicketOrden({...nuevaOrden, detallesParaTicket, numeroComensales})
       } catch {
         // No bloquear si falla la impresión
       }
@@ -360,32 +383,101 @@ export default function OrdenesPage() {
                 </div>
               </div>
 
+              {/* Selector de comensales */}
+              <div className="mb-3">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Comensales</label>
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="number" 
+                    min="1" 
+                    max="10" 
+                    value={numeroComensales}
+                    onChange={(e) => {
+                      const num = Math.max(1, Math.min(10, parseInt(e.target.value) || 1))
+                      setNumeroComensales(num)
+                      setForm((prev) => ({
+                        ...prev,
+                        detalles: prev.detalles.filter(d => d.comensal <= num),
+                      }))
+                      if (comensalActivo > num) setComensalActivo(num)
+                    }}
+                    className="w-20 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-200 outline-none"
+                  />
+                  <div className="flex-1 flex gap-1 overflow-x-auto">
+                    {Array.from({ length: numeroComensales }, (_, i) => i + 1).map((num) => (
+                      <button
+                        key={num}
+                        type="button"
+                        onClick={() => setComensalActivo(num)}
+                        className={`px-3 py-1 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+                          comensalActivo === num
+                            ? 'bg-primary-500 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        P{num}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
               <div className="mb-3">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Notas</label>
                 <input type="text" value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-200 outline-none" placeholder="Indicaciones especiales" />
               </div>
 
-              {/* Items */}
-              <div className="rounded-lg border border-gray-200 divide-y divide-gray-100 max-h-44 overflow-y-auto">
+              {/* Items agrupados por comensal */}
+              <div className="rounded-lg border border-gray-200 max-h-52 overflow-y-auto">
                 {form.detalles.length === 0 ? (
                   <p className="p-4 text-center text-sm text-gray-400">Selecciona productos del menú</p>
                 ) : (
-                  form.detalles.map((d) => (
-                    <div key={d.producto_id} className="flex items-center justify-between p-2">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">{d._nombre}</p>
-                        <p className="text-xs text-gray-500">${parseFloat(d._precio).toFixed(2)} c/u</p>
+                  Array.from({ length: numeroComensales }, (_, i) => i + 1).map((numComensal) => {
+                    const itemsComensal = form.detalles.filter(d => d.comensal === numComensal)
+                    if (itemsComensal.length === 0) return null
+                    return (
+                      <div key={numComensal} className="border-b border-gray-100 last:border-0">
+                        <div className="bg-gray-50 px-3 py-1.5 text-xs font-semibold text-gray-700 sticky top-0">
+                          Persona {numComensal}
+                        </div>
+                        {itemsComensal.map((d, idx) => (
+                          <div key={`${d.producto_id}-${numComensal}-${idx}`} className="p-2">
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-900 truncate">{d._nombre}</p>
+                                <p className="text-xs text-gray-500">${parseFloat(d._precio).toFixed(2)} c/u</p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button type="button" onClick={() => updateItemQty(d.producto_id, d.comensal, d.cantidad - 1)} className="rounded-md bg-gray-100 px-2 py-0.5 text-sm hover:bg-gray-200">−</button>
+                                <span className="w-6 text-center text-sm font-medium">{d.cantidad}</span>
+                                <button type="button" onClick={() => updateItemQty(d.producto_id, d.comensal, d.cantidad + 1)} className="rounded-md bg-gray-100 px-2 py-0.5 text-sm hover:bg-gray-200">+</button>
+                                <button type="button" onClick={() => removeItem(d.producto_id, d.comensal)} className="ml-1 text-red-400 hover:text-red-600">
+                                  <TrashIcon className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </div>
+                            {/* Botones de personalización */}
+                            <div className="grid grid-cols-2 gap-1 mt-1">
+                              {['', 'sin cebolla', 'sin cilantro', 'sencillo'].map((pers) => (
+                                <button
+                                  key={pers || 'todo'}
+                                  type="button"
+                                  onClick={() => setPersonalizacion(d.producto_id, d.comensal, pers)}
+                                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                                    d.personalizacion === pers
+                                      ? 'bg-texano-500 text-white'
+                                      : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                                  }`}
+                                >
+                                  {pers || 'Con todo'}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <button type="button" onClick={() => updateItemQty(d.producto_id, d.cantidad - 1)} className="rounded-md bg-gray-100 px-2 py-0.5 text-sm hover:bg-gray-200">−</button>
-                        <span className="w-6 text-center text-sm font-medium">{d.cantidad}</span>
-                        <button type="button" onClick={() => updateItemQty(d.producto_id, d.cantidad + 1)} className="rounded-md bg-gray-100 px-2 py-0.5 text-sm hover:bg-gray-200">+</button>
-                        <button type="button" onClick={() => removeItem(d.producto_id)} className="ml-1 text-red-400 hover:text-red-600">
-                          <TrashIcon className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))
+                    )
+                  })
                 )}
               </div>
 

@@ -83,16 +83,44 @@ function formatDate(dateStr) {
 
 /**
  * TICKET DE ORDEN (para cocina) — se imprime al crear orden.
+ * NO muestra precios, solo información para preparación.
  */
 export function printTicketOrden(orden) {
-  const items = (orden.detalles || []).map((d) => `
-    <tr>
-      <td class="qty">${d.cantidad}x</td>
-      <td class="name">${d.producto_nombre || 'Producto #' + d.producto_id}</td>
-      <td class="price">${money(d.subtotal)}</td>
-    </tr>
-    ${d.notas ? `<tr><td></td><td colspan="2" class="small">→ ${d.notas}</td></tr>` : ''}
-  `).join('')
+  let itemsHtml = ''
+  
+  if (orden.detallesParaTicket && orden.numeroComensales > 1) {
+    for (let numComensal = 1; numComensal <= orden.numeroComensales; numComensal++) {
+      const itemsComensal = orden.detallesParaTicket.filter(d => d.comensal === numComensal)
+      if (itemsComensal.length === 0) continue
+      
+      itemsHtml += `
+        <tr><td colspan="2" class="center bold mt" style="border-top: 1px dashed #000; padding-top: 4px;">═══ PERSONA ${numComensal} ═══</td></tr>
+      `
+      itemsComensal.forEach(d => {
+        const personalizacion = d.personalizacion ? ` [${d.personalizacion}]` : ''
+        itemsHtml += `
+          <tr>
+            <td class="qty">${d.cantidad}x</td>
+            <td class="name">${d._nombre}${personalizacion}</td>
+          </tr>
+          ${d.notas ? `<tr><td></td><td class="small">→ ${d.notas}</td></tr>` : ''}
+        `
+      })
+    }
+  } else {
+    const detalles = orden.detallesParaTicket || orden.detalles || []
+    detalles.forEach(d => {
+      const personalizacion = d.personalizacion ? ` [${d.personalizacion}]` : ''
+      const nombre = d._nombre || d.producto_nombre || 'Producto #' + d.producto_id
+      itemsHtml += `
+        <tr>
+          <td class="qty">${d.cantidad}x</td>
+          <td class="name">${nombre}${personalizacion}</td>
+        </tr>
+        ${d.notas ? `<tr><td></td><td class="small">→ ${d.notas}</td></tr>` : ''}
+      `
+    })
+  }
 
   const html = `
     <!DOCTYPE html>
@@ -107,18 +135,17 @@ export function printTicketOrden(orden) {
       <div class="row"><span>Mesa:</span><span class="bold">${orden.mesa_id || 'S/M'}</span></div>
       <div class="row"><span>Tipo:</span><span>${(orden.tipo || '').replace('_', ' ')}</span></div>
       <div class="row"><span>Fecha:</span><span>${formatDate(orden.creado_en)}</span></div>
+      ${orden.numeroComensales && orden.numeroComensales > 1 ? `<div class="row"><span>Personas:</span><span class="bold">${orden.numeroComensales}</span></div>` : ''}
 
       <div class="double-line"></div>
 
       <table class="items" cellspacing="0">
-        <tbody>${items}</tbody>
+        <tbody>${itemsHtml}</tbody>
       </table>
 
       <div class="double-line"></div>
 
       ${orden.notas ? `<div class="mt small"><b>Notas:</b> ${orden.notas}</div>` : ''}
-
-      <div class="center mt bold">TOTAL: ${money(orden.total)}</div>
 
       <div class="line mt"></div>
       <div class="center small mt">${formatDate(new Date().toISOString())}</div>

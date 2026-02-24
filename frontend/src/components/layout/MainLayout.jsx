@@ -23,7 +23,7 @@ const navigation = [
   { name: 'Categorías', to: '/categorias', icon: TagIcon },
   { name: 'Órdenes', to: '/ordenes', icon: ClipboardDocumentListIcon },
   { name: 'Ventas', to: '/pagos', icon: CreditCardIcon },
-  { name: 'Corte de Caja', to: '/cortes-caja', icon: CalculatorIcon },
+  { name: 'Corte de Caja', to: '/cortes-caja', icon: CalculatorIcon, roles: ['Administrador'] },
   { name: 'Usuarios', to: '/usuarios', icon: UsersIcon, roles: ['Administrador'] },
 ]
 
