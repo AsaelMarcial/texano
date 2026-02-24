@@ -11,10 +11,10 @@ from app.schemas.detalle_orden import DetalleOrdenCreate, DetalleOrdenUpdate
 def _recalcular_totales_orden(orden: Orden) -> None:
     """Recalcula subtotal, impuesto y total de la orden padre."""
     subtotal = sum(d.subtotal for d in orden.detalles)
-    impuesto = subtotal * Decimal("0.16")
+    impuesto = Decimal("0")  # IVA ya incluido en precios
     orden.subtotal = subtotal
     orden.impuesto = impuesto
-    orden.total = subtotal + impuesto
+    orden.total = subtotal  # Total = subtotal (IVA incluido)
 
 
 def get_detalles_por_orden(

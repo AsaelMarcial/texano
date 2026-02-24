@@ -18,10 +18,10 @@ def _generar_numero_orden(db: Session) -> str:
 def _recalcular_totales(orden: Orden) -> None:
     """Recalcula subtotal, impuesto y total de una orden."""
     subtotal = sum(d.subtotal for d in orden.detalles)
-    impuesto = subtotal * Decimal("0.16")  # IVA 16%
+    impuesto = Decimal("0")  # IVA ya incluido en precios
     orden.subtotal = subtotal
     orden.impuesto = impuesto
-    orden.total = subtotal + impuesto
+    orden.total = subtotal  # Total = subtotal (IVA incluido)
 
 
 def _orden_options():

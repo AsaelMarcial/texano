@@ -165,12 +165,9 @@ export function printTicketPago(orden, pagoInfo = {}) {
         <tbody>${items}</tbody>
       </table>
 
-      <div class="line"></div>
-
-      <div class="row"><span>Subtotal:</span><span>${money(orden.subtotal)}</span></div>
-      <div class="row"><span>IVA (16%):</span><span>${money(orden.impuesto)}</span></div>
       <div class="double-line"></div>
       <div class="row bold big"><span>TOTAL:</span><span>${money(orden.total)}</span></div>
+      <div class="center small">(IVA incluido)</div>
       <div class="line"></div>
 
       <div class="row mt"><span>Método:</span><span class="bold">${metodoLabel}</span></div>

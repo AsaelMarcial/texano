@@ -22,7 +22,7 @@ const navigation = [
   { name: 'Menú', to: '/productos', icon: ShoppingBagIcon },
   { name: 'Categorías', to: '/categorias', icon: TagIcon },
   { name: 'Órdenes', to: '/ordenes', icon: ClipboardDocumentListIcon },
-  { name: 'Pagos', to: '/pagos', icon: CreditCardIcon },
+  { name: 'Ventas', to: '/pagos', icon: CreditCardIcon },
   { name: 'Corte de Caja', to: '/cortes-caja', icon: CalculatorIcon },
   { name: 'Usuarios', to: '/usuarios', icon: UsersIcon, roles: ['Administrador'] },
 ]

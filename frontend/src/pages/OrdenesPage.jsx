@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
-import { PlusIcon, EyeIcon, TrashIcon, PrinterIcon, XCircleIcon } from '@heroicons/react/24/outline'
-import { getOrdenes, createOrden, updateOrden, deleteOrden, getMesas, getProductos, getCategorias, getOrden } from '../services/endpoints'
+import { PlusIcon, EyeIcon, TrashIcon, PrinterIcon, XCircleIcon, CreditCardIcon } from '@heroicons/react/24/outline'
+import { getOrdenes, createOrden, updateOrden, deleteOrden, getMesas, getProductos, getCategorias, getOrden, createPago } from '../services/endpoints'
 import PageHeader from '../components/ui/PageHeader'
 import StatusBadge from '../components/ui/StatusBadge'
 import Modal from '../components/ui/Modal'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
-import { printTicketOrden } from '../utils/printTicket'
+import { printTicketOrden, printTicketPago } from '../utils/printTicket'
 
 export default function OrdenesPage() {
   const [ordenes, setOrdenes] = useState([])
@@ -19,9 +19,13 @@ export default function OrdenesPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [detailOpen, setDetailOpen] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [pagoOpen, setPagoOpen] = useState(false)
   const [selectedOrden, setSelectedOrden] = useState(null)
   const [deleting, setDeleting] = useState(null)
   const [filtroEstado, setFiltroEstado] = useState('')
+
+  // Form para pago
+  const [formPago, setFormPago] = useState({ metodo_pago: 'efectivo', monto_recibido: '' })
 
   // Form para nueva orden
   const [form, setForm] = useState({ mesa_id: '', tipo: 'en_sitio', notas: '', detalles: [] })
@@ -148,22 +152,78 @@ export default function OrdenesPage() {
     }
   }
 
+  const abrirPago = (orden) => {
+    setSelectedOrden(orden)
+    setFormPago({ metodo_pago: 'efectivo', monto_recibido: '' })
+    setPagoOpen(true)
+  }
+
+  const cambio = formPago.metodo_pago === 'efectivo' && formPago.monto_recibido && selectedOrden
+    ? Math.max(0, parseFloat(formPago.monto_recibido) - parseFloat(selectedOrden.total))
+    : 0
+
+  const handlePago = async (e) => {
+    e.preventDefault()
+    if (formPago.metodo_pago === 'efectivo' && parseFloat(formPago.monto_recibido) < parseFloat(selectedOrden.total)) {
+      toast.error('El monto recibido debe ser mayor o igual al total')
+      return
+    }
+    setSaving(true)
+    try {
+      await createPago({
+        orden_id: selectedOrden.id,
+        monto: parseFloat(selectedOrden.total),
+        metodo_pago: formPago.metodo_pago,
+        referencia: null,
+      })
+      toast.success('Pago registrado correctamente')
+
+      // Imprimir ticket de pago
+      try {
+        const { data: ordenCompleta } = await getOrden(selectedOrden.id)
+        printTicketPago(ordenCompleta, {
+          metodo_pago: formPago.metodo_pago,
+          monto: parseFloat(selectedOrden.total),
+          monto_recibido: formPago.metodo_pago === 'efectivo' ? parseFloat(formPago.monto_recibido) : null,
+          cambio: formPago.metodo_pago === 'efectivo' ? cambio : 0,
+        })
+      } catch {
+        // Si falla la impresión, no bloquear
+      }
+
+      setPagoOpen(false)
+      fetchData()
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Error al registrar pago')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const total = form.detalles.reduce((sum, d) => sum + parseFloat(d._precio || 0) * d.cantidad, 0)
 
   const prodsFiltrados = catSeleccionada
     ? productos.filter((p) => p.categoria_id === parseInt(catSeleccionada) && p.disponible)
     : productos.filter((p) => p.disponible)
 
+  // Filtrar órdenes: por defecto excluir pagadas
+  const ordenesFiltradas = filtroEstado === 'todas' 
+    ? ordenes
+    : filtroEstado 
+      ? ordenes.filter(o => o.estado === filtroEstado)
+      : ordenes.filter(o => o.estado !== 'pagada')
+
   if (loading) return <LoadingSpinner className="mt-32" size="lg" />
 
   return (
     <div>
-      <PageHeader title="Órdenes" subtitle={`${ordenes.length} órdenes`}>
+      <PageHeader title="Órdenes" subtitle={`${ordenesFiltradas.length} órdenes`}>
         <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-200 outline-none">
-          <option value="">Todos los estados</option>
-          <option value="abierta">Abierta</option>
-          <option value="pagada">Pagada</option>
-          <option value="cancelada">Cancelada</option>
+          <option value="">Activas (sin pagadas)</option>
+          <option value="abierta">Solo abiertas</option>
+          <option value="pagada">Pagadas</option>
+          <option value="cancelada">Canceladas</option>
+          <option value="todas">Todas</option>
         </select>
         <button onClick={openCreate} className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-700 transition-colors">
           <PlusIcon className="h-4 w-4" /> Nueva orden
@@ -172,7 +232,7 @@ export default function OrdenesPage() {
 
       {/* Vista móvil: Cards */}
       <div className="space-y-3 md:hidden">
-        {ordenes.map((orden) => (
+        {ordenesFiltradas.map((orden) => (
           <div key={orden.id} className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200">
             <div className="flex items-center justify-between mb-2">
               <span className="text-base font-bold text-gray-900">{orden.numero_orden}</span>
@@ -191,6 +251,11 @@ export default function OrdenesPage() {
               <button onClick={() => reimprimirTicket(orden.id)} className="flex-1 rounded-lg bg-gray-50 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100 active:bg-gray-200">
                 🖨️ Ticket
               </button>
+              {(orden.estado === 'abierta' || orden.estado === 'pendiente' || orden.estado === 'lista' || orden.estado === 'entregada') && (
+                <button onClick={() => abrirPago(orden)} className="rounded-lg bg-green-50 px-3 py-2 text-xs font-medium text-green-700 hover:bg-green-100 active:bg-green-200">
+                  Pagar
+                </button>
+              )}
               {orden.estado === 'abierta' && (
                 <button onClick={() => cancelarOrden(orden)} className="rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-100 active:bg-red-200">
                   Cancelar
@@ -216,7 +281,7 @@ export default function OrdenesPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {ordenes.map((orden) => (
+            {ordenesFiltradas.map((orden) => (
               <tr key={orden.id} className="hover:bg-gray-50 transition-colors">
                 <td className="px-4 py-3 text-sm font-semibold text-gray-900">{orden.numero_orden}</td>
                 <td className="px-4 py-3 text-sm text-gray-500">{orden.mesa_id || '—'}</td>
@@ -232,6 +297,11 @@ export default function OrdenesPage() {
                     <button onClick={() => reimprimirTicket(orden.id)} className="rounded-md p-1 text-gray-400 hover:bg-primary-50 hover:text-primary-600" title="Reimprimir ticket">
                       <PrinterIcon className="h-4 w-4" />
                     </button>
+                    {(orden.estado === 'abierta' || orden.estado === 'pendiente' || orden.estado === 'lista' || orden.estado === 'entregada') && (
+                      <button onClick={() => abrirPago(orden)} className="rounded-md p-1 text-green-600 hover:bg-green-50" title="Pagar orden">
+                        <CreditCardIcon className="h-4 w-4" />
+                      </button>
+                    )}
                     {orden.estado === 'abierta' && (
                       <button onClick={() => cancelarOrden(orden)} className="rounded-md px-2 py-1 text-xs bg-red-50 text-red-700 hover:bg-red-100" title="Cancelar orden">
                         <XCircleIcon className="h-4 w-4" />
@@ -361,11 +431,11 @@ export default function OrdenesPage() {
             </div>
             <div className="flex justify-between rounded-lg bg-gray-50 p-3">
               <div className="text-sm space-y-1">
-                <p className="text-gray-500">Subtotal: <span className="font-medium text-gray-900">${parseFloat(selectedOrden.subtotal).toFixed(2)}</span></p>
-                <p className="text-gray-500">IVA 16%: <span className="font-medium text-gray-900">${parseFloat(selectedOrden.impuesto).toFixed(2)}</span></p>
+                <p className="text-gray-500">Total: <span className="font-medium text-gray-900">${parseFloat(selectedOrden.total).toFixed(2)}</span></p>
+                <p className="text-xs text-gray-400">(IVA incluido)</p>
               </div>
               <div className="text-right">
-                <p className="text-sm text-gray-500">Total</p>
+                <p className="text-sm text-gray-500">Total a pagar</p>
                 <p className="text-2xl font-bold text-texano-500">${parseFloat(selectedOrden.total).toFixed(2)}</p>
               </div>
             </div>
@@ -379,6 +449,81 @@ export default function OrdenesPage() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Modal pago */}
+      <Modal open={pagoOpen} onClose={() => setPagoOpen(false)} title={`Pagar orden #${selectedOrden?.numero_orden || ''}`}>
+        <form onSubmit={handlePago} className="space-y-4">
+          <div className="rounded-lg bg-gray-50 p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-600">Total a pagar:</span>
+              <span className="text-2xl font-bold text-texano-600">${selectedOrden ? parseFloat(selectedOrden.total).toFixed(2) : '0.00'}</span>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Método de pago</label>
+            <div className="grid grid-cols-3 gap-2">
+              {['efectivo', 'tarjeta', 'transferencia'].map((metodo) => (
+                <button
+                  key={metodo}
+                  type="button"
+                  onClick={() => setFormPago({ ...formPago, metodo_pago: metodo, monto_recibido: metodo !== 'efectivo' ? '' : formPago.monto_recibido })}
+                  className={`rounded-lg border-2 px-4 py-3 text-sm font-medium capitalize transition-colors ${
+                    formPago.metodo_pago === metodo
+                      ? 'border-primary-500 bg-primary-50 text-primary-700'
+                      : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  {metodo}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {formPago.metodo_pago === 'efectivo' && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Monto recibido</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={formPago.monto_recibido}
+                  onChange={(e) => setFormPago({ ...formPago, monto_recibido: e.target.value })}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-200 outline-none"
+                  placeholder="0.00"
+                />
+              </div>
+              {formPago.monto_recibido && cambio >= 0 && (
+                <div className="rounded-lg bg-green-50 p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-green-800">Cambio:</span>
+                    <span className="text-xl font-bold text-green-700">${cambio.toFixed(2)}</span>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => setPagoOpen(false)}
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={saving || (formPago.metodo_pago === 'efectivo' && (!formPago.monto_recibido || parseFloat(formPago.monto_recibido) < parseFloat(selectedOrden?.total || 0)))}
+              className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <CreditCardIcon className="h-4 w-4" />
+              {saving ? 'Procesando...' : '💳 Cobrar e imprimir'}
+            </button>
+          </div>
+        </form>
       </Modal>
 
       <ConfirmDialog open={confirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleDelete} title="Eliminar orden" message={`¿Eliminar la orden #${deleting?.numero_orden}? Esta acción no se puede deshacer.`} />
