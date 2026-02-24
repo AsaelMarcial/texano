@@ -38,21 +38,21 @@ function ticketStyles() {
       * { margin: 0; padding: 0; box-sizing: border-box; }
       body {
         font-family: 'Courier New', monospace;
-        font-size: 12px;
+        font-size: 16px;
         width: ${TICKET_WIDTH};
-        padding: 3mm 2mm;
+        padding: 1mm 1mm;
         color: #000;
         font-weight: bold;
       }
       .center { text-align: center; }
       .bold { font-weight: bold; }
-      .big { font-size: 13px; }
-      .small { font-size: 8px; }
+      .big { font-size: 15px; }
+      .small { font-size: 10px; }
       .line { border-top: 1px dashed #000; margin: 3px 0; }
       .double-line { border-top: 2px solid #000; margin: 3px 0; }
-      .row { display: flex; justify-content: space-between; font-size: 9px; }
+      .row { display: flex; justify-content: space-between; font-size: 11px; }
       .items { width: 100%; }
-      .items td { padding: 1px 0; vertical-align: top; font-size: 9px; }
+      .items td { padding: 1px 0; vertical-align: top; font-size: 11px; }
       .items .qty { width: 20px; text-align: center; }
       .items .name { word-wrap: break-word; max-width: 30mm; }
       .items .price { text-align: right; white-space: nowrap; padding-left: 2px; }
