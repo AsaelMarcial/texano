@@ -1,17 +1,17 @@
 /**
- * Utilidades de impresión de tickets para impresora térmica (80mm).
+ * Utilidades de impresión de tickets para impresora térmica (58mm).
  * Usa window.open + window.print para generar tickets.
  */
 
 const RESTAURANT_NAME = 'El Texano'
 const RESTAURANT_SLOGAN = '¡Buen provecho!'
-const TICKET_WIDTH = '80mm'
+const TICKET_WIDTH = '58mm'
 
 /**
  * Abre una ventana con el contenido HTML y lanza la impresión.
  */
 function openPrintWindow(htmlContent) {
-  const win = window.open('', '_blank', 'width=350,height=600')
+  const win = window.open('', '_blank', 'width=250,height=600')
   if (!win) {
     alert('Por favor permite las ventanas emergentes para imprimir tickets.')
     return
@@ -38,23 +38,23 @@ function ticketStyles() {
       * { margin: 0; padding: 0; box-sizing: border-box; }
       body {
         font-family: 'Courier New', monospace;
-        font-size: 12px;
+        font-size: 10px;
         width: ${TICKET_WIDTH};
-        padding: 5mm 3mm;
+        padding: 3mm 2mm;
         color: #000;
       }
       .center { text-align: center; }
       .bold { font-weight: bold; }
-      .big { font-size: 16px; }
-      .small { font-size: 10px; }
-      .line { border-top: 1px dashed #000; margin: 4px 0; }
-      .double-line { border-top: 2px solid #000; margin: 4px 0; }
-      .row { display: flex; justify-content: space-between; }
+      .big { font-size: 13px; }
+      .small { font-size: 8px; }
+      .line { border-top: 1px dashed #000; margin: 3px 0; }
+      .double-line { border-top: 2px solid #000; margin: 3px 0; }
+      .row { display: flex; justify-content: space-between; font-size: 9px; }
       .items { width: 100%; }
-      .items td { padding: 1px 0; vertical-align: top; }
-      .items .qty { width: 25px; text-align: center; }
-      .items .name { }
-      .items .price { text-align: right; white-space: nowrap; }
+      .items td { padding: 1px 0; vertical-align: top; font-size: 9px; }
+      .items .qty { width: 20px; text-align: center; }
+      .items .name { word-wrap: break-word; max-width: 30mm; }
+      .items .price { text-align: right; white-space: nowrap; padding-left: 2px; }
       .mt { margin-top: 4px; }
       .mb { margin-bottom: 4px; }
     </style>
