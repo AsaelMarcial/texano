@@ -17,7 +17,7 @@ class DetalleOrden(Base):
     producto_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("productos.id"), nullable=False
     )
-    cantidad: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    cantidad: Mapped[Decimal] = mapped_column(Numeric(10, 3), nullable=False, default=1)
     precio_unitario: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     subtotal: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     notas: Mapped[str | None] = mapped_column(String(255), nullable=True)

@@ -15,6 +15,7 @@ class ProductoBase(BaseModel):
     disponible: bool = True
     tiempo_preparacion: int | None = None
     activo: bool = True
+    es_granel: bool = False
 
 
 class ProductoCreate(ProductoBase):
@@ -30,6 +31,7 @@ class ProductoUpdate(BaseModel):
     disponible: bool | None = None
     tiempo_preparacion: int | None = None
     activo: bool | None = None
+    es_granel: bool | None = None
 
 
 class ProductoOut(ProductoBase):

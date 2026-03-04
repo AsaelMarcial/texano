@@ -1,7 +1,9 @@
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models.pago import Pago
 from app.models.orden import Orden
+from app.models.corte_caja import CorteCaja
 from app.schemas.pago import PagoCreate, PagoUpdate
 
 
@@ -17,13 +19,36 @@ def get_pagos_por_orden(db: Session, orden_id: int) -> list[Pago]:
     return db.query(Pago).filter(Pago.orden_id == orden_id).all()
 
 
+def get_pagos_por_corte(db: Session, corte_id: int) -> list[Pago]:
+    """Obtiene todos los pagos vinculados a un corte de caja."""
+    return (
+        db.query(Pago)
+        .filter(Pago.corte_caja_id == corte_id)
+        .order_by(Pago.id.desc())
+        .all()
+    )
+
+
 def create_pago(db: Session, pago_in: PagoCreate, cajero_id: int) -> Pago:
+    # Buscar corte de caja abierto (global, no por cajero)
+    corte_abierto = (
+        db.query(CorteCaja)
+        .filter(CorteCaja.estado == "abierto")
+        .first()
+    )
+    if not corte_abierto:
+        raise HTTPException(
+            status_code=400,
+            detail="Debe abrir un corte de caja antes de registrar pagos.",
+        )
+
     db_pago = Pago(
         orden_id=pago_in.orden_id,
         monto=pago_in.monto,
         metodo_pago=pago_in.metodo_pago,
         referencia=pago_in.referencia,
         cajero_id=cajero_id,
+        corte_caja_id=corte_abierto.id,
     )
     db.add(db_pago)
 

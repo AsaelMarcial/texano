@@ -1,43 +1,49 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import toast from 'react-hot-toast'
-import { PrinterIcon, EyeIcon } from '@heroicons/react/24/outline'
-import { getPagos, getOrden } from '../services/endpoints'
+import { PrinterIcon, EyeIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline'
+import { getVentasActuales, getPagosCorte, getOrden } from '../services/endpoints'
 import PageHeader from '../components/ui/PageHeader'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import Modal from '../components/ui/Modal'
 import { printTicketPago } from '../utils/printTicket'
 
 export default function PagosPage() {
+  const [ventas, setVentas] = useState(null)
   const [pagos, setPagos] = useState([])
   const [loading, setLoading] = useState(true)
-  const [soloHoy, setSoloHoy] = useState(true)
   const [detailOpen, setDetailOpen] = useState(false)
   const [detailOrden, setDetailOrden] = useState(null)
   const [detailPago, setDetailPago] = useState(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
-      const { data } = await getPagos(0, 500)
-      setPagos(data)
+      const { data: ventasData } = await getVentasActuales()
+      setVentas(ventasData)
+
+      // Si hay corte abierto, cargar sus pagos
+      if (ventasData.corte_abierto && ventasData.corte_id) {
+        const { data: pagosData } = await getPagosCorte(ventasData.corte_id)
+        setPagos(pagosData)
+      } else {
+        setPagos([])
+      }
     } catch {
       toast.error('Error al cargar ventas')
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
-  useEffect(() => { fetchData() }, [])
+  useEffect(() => { fetchData() }, [fetchData])
 
-  const isToday = (dateStr) => {
-    const d = new Date(dateStr)
-    const now = new Date()
-    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
-  }
+  // Auto-refresh cada 30 segundos
+  useEffect(() => {
+    const interval = setInterval(fetchData, 30000)
+    return () => clearInterval(interval)
+  }, [fetchData])
 
-  const filtered = useMemo(() => soloHoy ? pagos.filter(p => isToday(p.creado_en)) : pagos, [pagos, soloHoy])
-
-  const totalDia = useMemo(() => filtered.reduce((sum, p) => sum + parseFloat(p.monto || 0), 0), [filtered])
+  const totalDia = useMemo(() => pagos.reduce((sum, p) => sum + parseFloat(p.monto || 0), 0), [pagos])
 
   const money = (val) => '$' + parseFloat(val || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })
 
@@ -65,20 +71,57 @@ export default function PagosPage() {
 
   if (loading) return <LoadingSpinner className="mt-32" size="lg" />
 
+  // Si no hay corte abierto
+  if (!ventas?.corte_abierto) {
+    return (
+      <div>
+        <PageHeader title="Ventas" subtitle="Sin corte abierto" />
+        <div className="mt-12 flex flex-col items-center justify-center text-center">
+          <ExclamationTriangleIcon className="h-16 w-16 text-amber-400 mb-4" />
+          <h2 className="text-xl font-semibold text-gray-700 mb-2">No hay corte de caja abierto</h2>
+          <p className="text-gray-500 max-w-md">
+            Abre un corte de caja en la sección <b>Corte de Caja</b> para comenzar a registrar ventas.
+            Las ventas se mostrarán aquí mientras el corte esté abierto.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div>
-      <PageHeader title="Ventas" subtitle={`${filtered.length} ventas — Total: ${money(totalDia)}`}>
+      <PageHeader title="Ventas" subtitle={`${pagos.length} ventas — Total: ${money(totalDia)}`}>
         <button
-          onClick={() => setSoloHoy(!soloHoy)}
-          className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${soloHoy ? 'bg-primary-600 text-white hover:bg-primary-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+          onClick={fetchData}
+          className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-200 transition-colors"
         >
-          {soloHoy ? 'Hoy' : 'Todas'}
+          ↻ Actualizar
         </button>
       </PageHeader>
 
+      {/* Resumen del corte actual */}
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200">
+          <p className="text-xs text-gray-500 uppercase font-medium">Efectivo</p>
+          <p className="text-xl font-bold text-gray-900 mt-1">{money(ventas.total_efectivo)}</p>
+        </div>
+        <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200">
+          <p className="text-xs text-gray-500 uppercase font-medium">Tarjeta</p>
+          <p className="text-xl font-bold text-gray-900 mt-1">{money(ventas.total_tarjeta)}</p>
+        </div>
+        <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200">
+          <p className="text-xs text-gray-500 uppercase font-medium">Transferencia</p>
+          <p className="text-xl font-bold text-gray-900 mt-1">{money(ventas.total_transferencia)}</p>
+        </div>
+        <div className="rounded-xl bg-green-50 p-4 shadow-sm ring-1 ring-green-200">
+          <p className="text-xs text-green-700 uppercase font-medium">Total ventas</p>
+          <p className="text-xl font-bold text-green-700 mt-1">{money(ventas.total_ventas)}</p>
+        </div>
+      </div>
+
       {/* Vista móvil: Cards */}
       <div className="space-y-3 md:hidden">
-        {filtered.map((pago) => (
+        {pagos.map((pago) => (
           <div key={pago.id} onClick={() => openDetail(pago)} className="cursor-pointer rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200 active:bg-gray-50">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-gray-500">Orden <b className="text-gray-900">#{pago.orden_id}</b></span>
@@ -99,6 +142,9 @@ export default function PagosPage() {
             </div>
           </div>
         ))}
+        {pagos.length === 0 && (
+          <p className="text-center text-sm text-gray-400 py-8">Aún no hay ventas en este corte.</p>
+        )}
       </div>
 
       {/* Vista desktop: Tabla */}
@@ -111,19 +157,19 @@ export default function PagosPage() {
               <th className="px-4 py-3 text-right text-xs font-semibold uppercase text-gray-500">Monto</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Método</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Referencia</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Fecha</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">Hora</th>
               <th className="px-4 py-3 text-center text-xs font-semibold uppercase text-gray-500">Acciones</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {filtered.map((pago) => (
+            {pagos.map((pago) => (
               <tr key={pago.id} onClick={() => openDetail(pago)} className="hover:bg-gray-50 cursor-pointer transition-colors">
                 <td className="px-4 py-3 text-sm font-medium text-gray-900">{pago.id}</td>
                 <td className="px-4 py-3 text-sm text-gray-500">#{pago.orden_id}</td>
                 <td className="px-4 py-3 text-sm text-right font-semibold text-green-700">{money(pago.monto)}</td>
                 <td className="px-4 py-3 text-sm text-gray-500 capitalize">{pago.metodo_pago}</td>
                 <td className="px-4 py-3 text-sm text-gray-500">{pago.referencia || '—'}</td>
-                <td className="px-4 py-3 text-sm text-gray-500">{new Date(pago.creado_en).toLocaleString('es-MX')}</td>
+                <td className="px-4 py-3 text-sm text-gray-500">{new Date(pago.creado_en).toLocaleString('es-MX', { hour: '2-digit', minute: '2-digit' })}</td>
                 <td className="px-4 py-3 text-center">
                   <div className="inline-flex gap-1">
                     <button onClick={(e) => { e.stopPropagation(); openDetail(pago) }} className="rounded-md p-1 text-gray-400 hover:bg-primary-50 hover:text-primary-600" title="Ver detalle">
@@ -136,6 +182,11 @@ export default function PagosPage() {
                 </td>
               </tr>
             ))}
+            {pagos.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-4 py-8 text-center text-sm text-gray-400">Aún no hay ventas en este corte.</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -144,7 +195,6 @@ export default function PagosPage() {
       <Modal open={detailOpen} onClose={() => setDetailOpen(false)} title={`Detalle — Orden #${detailPago?.orden_id || ''}`}>
         {detailPago && (
           <div className="space-y-4">
-            {/* Info del pago */}
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div className="rounded-lg bg-gray-50 p-3">
                 <p className="text-xs text-gray-500">Método de pago</p>
@@ -166,7 +216,6 @@ export default function PagosPage() {
               )}
             </div>
 
-            {/* Productos de la orden */}
             {loadingDetail ? (
               <div className="flex justify-center py-4"><LoadingSpinner size="sm" /></div>
             ) : detailOrden ? (
@@ -176,7 +225,10 @@ export default function PagosPage() {
                   {(detailOrden.detalles || []).map((d, i) => (
                     <div key={i} className="flex items-start justify-between px-4 py-2.5 text-sm">
                       <div className="flex-1">
-                        <p className="font-medium text-gray-900">{d.cantidad}x {d.producto?.nombre || `Producto #${d.producto_id}`}</p>
+                        <p className="font-medium text-gray-900">
+                          {d.es_granel ? '' : `${d.cantidad}x `}{d.producto_nombre || `Producto #${d.producto_id}`}
+                          {d.es_granel && <span className="ml-1 text-xs text-amber-600">⚖️</span>}
+                        </p>
                         {d.notas && <p className="text-xs text-gray-500 mt-0.5">{d.notas}</p>}
                       </div>
                       <span className="font-medium text-gray-700 ml-3">{money(d.subtotal)}</span>
@@ -192,7 +244,6 @@ export default function PagosPage() {
               <p className="text-sm text-gray-500 text-center py-4">No se pudo cargar el detalle de la orden.</p>
             )}
 
-            {/* Acciones */}
             <div className="flex justify-end gap-3 pt-2">
               <button onClick={() => reprint(detailPago)} className="inline-flex items-center gap-2 rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200">
                 <PrinterIcon className="h-4 w-4" /> Reimprimir

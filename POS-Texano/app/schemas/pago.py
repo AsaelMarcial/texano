@@ -28,6 +28,7 @@ class PagoOut(BaseModel):
     metodo_pago: str
     referencia: str | None = None
     cajero_id: int
+    corte_caja_id: int | None = None
     creado_en: datetime
 
     model_config = {"from_attributes": True}

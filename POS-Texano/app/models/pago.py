@@ -20,11 +20,17 @@ class Pago(Base):
     cajero_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("usuarios.id"), nullable=False
     )
+    corte_caja_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("cortes_caja.id"), nullable=True
+    )
     creado_en: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     # Relaciones
     orden: Mapped["Orden"] = relationship("Orden", back_populates="pagos")  # noqa: F821
     cajero: Mapped["Usuario"] = relationship(  # noqa: F821
         "Usuario", back_populates="pagos", foreign_keys=[cajero_id]
+    )
+    corte_caja: Mapped["CorteCaja | None"] = relationship(  # noqa: F821
+        "CorteCaja", back_populates="pagos"
     )
 

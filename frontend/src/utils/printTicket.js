@@ -99,10 +99,11 @@ export function printTicketOrden(orden) {
         <tr><td colspan="2" class="center bold mt" style="border-top: 1px dashed #000; padding-top: 4px;">═══ P${numComensal} (${pers}) ═══</td></tr>
       `
       itemsComensal.forEach(d => {
+        const isGranel = d.es_granel || d._es_granel
         itemsHtml += `
           <tr>
-            <td class="qty">${d.cantidad}x</td>
-            <td class="name">${d._nombre}</td>
+            <td class="qty">${isGranel ? '⚖' : d.cantidad + 'x'}</td>
+            <td class="name">${d._nombre}${isGranel ? ' ($' + parseFloat(d.subtotal || d._precio_unitario || 0).toFixed(2) + ')' : ''}</td>
           </tr>
           ${d.notas ? `<tr><td></td><td class="small">→ ${d.notas}</td></tr>` : ''}
         `
@@ -117,10 +118,11 @@ export function printTicketOrden(orden) {
     }
     detalles.forEach(d => {
       const nombre = d._nombre || d.producto_nombre || 'Producto #' + d.producto_id
+      const isGranel = d.es_granel || d._es_granel
       itemsHtml += `
         <tr>
-          <td class="qty">${d.cantidad}x</td>
-          <td class="name">${nombre}</td>
+          <td class="qty">${isGranel ? '⚖' : d.cantidad + 'x'}</td>
+          <td class="name">${nombre}${isGranel ? ' ($' + parseFloat(d.subtotal || d._precio_unitario || 0).toFixed(2) + ')' : ''}</td>
         </tr>
         ${d.notas ? `<tr><td></td><td class="small">→ ${d.notas}</td></tr>` : ''}
       `
@@ -164,13 +166,16 @@ export function printTicketOrden(orden) {
  * TICKET DE PAGO (para cliente) — se imprime al cobrar.
  */
 export function printTicketPago(orden, pagoInfo = {}) {
-  const items = (orden.detalles || []).map((d) => `
-    <tr>
-      <td class="qty">${d.cantidad}x</td>
-      <td class="name">${d.producto_nombre || 'Producto #' + d.producto_id}</td>
-      <td class="price">${money(d.subtotal)}</td>
-    </tr>
-  `).join('')
+  const items = (orden.detalles || []).map((d) => {
+    const isGranel = d.es_granel
+    return `
+      <tr>
+        <td class="qty">${isGranel ? '⚖' : d.cantidad + 'x'}</td>
+        <td class="name">${d.producto_nombre || 'Producto #' + d.producto_id}</td>
+        <td class="price">${money(d.subtotal)}</td>
+      </tr>
+    `
+  }).join('')
 
   const metodoLabel = {
     efectivo: 'Efectivo',

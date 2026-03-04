@@ -27,6 +27,7 @@ class Producto(Base):
         Integer, ForeignKey("categorias.id"), nullable=False
     )
     imagen_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    es_granel: Mapped[bool] = mapped_column(Boolean, default=False)
     disponible: Mapped[bool] = mapped_column(Boolean, default=True)
     tiempo_preparacion: Mapped[int | None] = mapped_column(Integer, nullable=True)
     activo: Mapped[bool] = mapped_column(Boolean, default=True)

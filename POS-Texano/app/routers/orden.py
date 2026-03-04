@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.security import get_current_user
+from app.core.ws_manager import manager
 from app.crud.orden import (
     create_orden,
     delete_orden,
@@ -14,6 +15,20 @@ from app.crud.orden import (
 from app.schemas.orden import OrdenCreate, OrdenOut, OrdenUpdate
 
 router = APIRouter(prefix="/api/ordenes", tags=["Órdenes"])
+
+# Router separado para WebSocket (sin prefix de /api/ordenes)
+ws_router = APIRouter()
+
+
+@ws_router.websocket("/ws/ordenes")
+async def websocket_ordenes(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            # Mantener la conexión abierta esperando mensajes (ping/pong)
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
 
 
 @router.get("/", response_model=list[OrdenOut])
@@ -42,12 +57,21 @@ def obtener_orden(
 
 
 @router.post("/", response_model=OrdenOut, status_code=status.HTTP_201_CREATED)
-def crear_orden(
+async def crear_orden(
     orden_in: OrdenCreate,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    return create_orden(db, orden_in, mesero_id=current_user.id)
+    nueva_orden = create_orden(db, orden_in, mesero_id=current_user.id)
+
+    # Broadcast a todos los clientes WebSocket conectados
+    orden_data = OrdenOut.model_validate(nueva_orden).model_dump(mode="json")
+    await manager.broadcast({
+        "type": "nueva_orden",
+        "orden": orden_data,
+    })
+
+    return nueva_orden
 
 
 @router.put("/{orden_id}", response_model=OrdenOut)

@@ -20,6 +20,10 @@ export default defineConfig({
         target: API_TARGET,
         changeOrigin: true,
       },
+      '/ws': {
+        target: API_TARGET.replace('http', 'ws'),
+        ws: true,
+      },
     },
   },
 })

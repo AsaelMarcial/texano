@@ -71,6 +71,8 @@ export const getCortesCaja = (skip = 0, limit = 100) =>
   api.get('/cortes-caja', { params: { skip, limit } })
 export const getCorteCaja = (id) => api.get(`/cortes-caja/${id}`)
 export const getCorteAbierto = () => api.get('/cortes-caja/abierto')
+export const getVentasActuales = () => api.get('/cortes-caja/ventas-actuales')
+export const getPagosCorte = (corteId) => api.get(`/cortes-caja/${corteId}/pagos`)
 export const createCorteCaja = (data) => api.post('/cortes-caja/abrir', data)
 export const closeCorteCaja = (id, data) =>
   api.post(`/cortes-caja/${id}/cerrar`, data)

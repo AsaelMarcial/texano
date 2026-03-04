@@ -64,6 +64,7 @@ app.include_router(mesa.router)
 app.include_router(categoria.router)
 app.include_router(producto.router)
 app.include_router(orden.router)
+app.include_router(orden.ws_router)  # WebSocket para órdenes en tiempo real
 app.include_router(detalle_orden.router)
 app.include_router(pago.router)
 app.include_router(corte_caja.router)

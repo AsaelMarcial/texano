@@ -9,7 +9,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner'
 
 const defaultForm = {
   nombre: '', descripcion: '', precio: '', categoria_id: '',
-  disponible: true, activo: true,
+  disponible: true, activo: true, es_granel: false,
 }
 
 export default function ProductosPage() {
@@ -54,7 +54,7 @@ export default function ProductosPage() {
     setForm({
       nombre: prod.nombre, descripcion: prod.descripcion || '', precio: prod.precio,
       categoria_id: prod.categoria_id,
-      disponible: prod.disponible, activo: prod.activo,
+      disponible: prod.disponible, activo: prod.activo, es_granel: prod.es_granel || false,
     })
     setImagenFile(null)
     setImagenPreview(prod.imagen_url || null)
@@ -92,11 +92,12 @@ export default function ProductosPage() {
       const payload = {
         nombre: form.nombre,
         descripcion: form.descripcion || null,
-        precio: parseFloat(form.precio),
+        precio: parseFloat(form.precio) || 0,
         categoria_id: parseInt(form.categoria_id),
         imagen_url,
         disponible: form.disponible,
         activo: form.activo,
+        es_granel: form.es_granel,
       }
 
       if (editing) {
@@ -167,7 +168,7 @@ export default function ProductosPage() {
                   <p className="text-xs text-gray-500">{prod.categoria?.nombre || '—'}</p>
                 </div>
                 <span className="text-lg font-bold text-texano-500">
-                  ${parseFloat(prod.precio).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                  {prod.es_granel ? '⚖️ Granel' : `$${parseFloat(prod.precio).toLocaleString('es-MX', { minimumFractionDigits: 2 })}`}
                 </span>
               </div>
               {prod.descripcion && (
@@ -255,6 +256,10 @@ export default function ProductosPage() {
             <div className="flex items-center gap-2">
               <input type="checkbox" id="prod-activo" checked={form.activo} onChange={(e) => setForm({ ...form, activo: e.target.checked })} className="h-4 w-4 rounded border-gray-300 text-primary-600" />
               <label htmlFor="prod-activo" className="text-sm text-gray-700">Activo</label>
+            </div>
+            <div className="flex items-center gap-2">
+              <input type="checkbox" id="prod-granel" checked={form.es_granel} onChange={(e) => setForm({ ...form, es_granel: e.target.checked, precio: e.target.checked ? '0' : form.precio })} className="h-4 w-4 rounded border-amber-500 text-amber-600" />
+              <label htmlFor="prod-granel" className="text-sm text-gray-700">⚖️ A granel</label>
             </div>
           </div>
           <div className="flex justify-end gap-3 pt-2">

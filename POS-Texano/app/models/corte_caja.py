@@ -36,4 +36,7 @@ class CorteCaja(Base):
     cajero: Mapped["Usuario"] = relationship(  # noqa: F821
         "Usuario", back_populates="cortes_caja"
     )
+    pagos: Mapped[list["Pago"]] = relationship(  # noqa: F821
+        "Pago", back_populates="corte_caja"
+    )
 

@@ -83,11 +83,18 @@ def create_orden(db: Session, orden_in: OrdenCreate, mesero_id: int) -> Orden:
         ).first()
         if not producto:
             continue
-        subtotal = producto.precio * detalle_in.cantidad
+
+        # Productos a granel: usar precio_unitario del request
+        if producto.es_granel and detalle_in.precio_unitario is not None:
+            precio = detalle_in.precio_unitario
+        else:
+            precio = producto.precio
+
+        subtotal = precio * detalle_in.cantidad
         db_detalle = DetalleOrden(
             producto_id=detalle_in.producto_id,
             cantidad=detalle_in.cantidad,
-            precio_unitario=producto.precio,
+            precio_unitario=precio,
             subtotal=subtotal,
             notas=detalle_in.notas,
         )

@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import toast from 'react-hot-toast'
-import { PlusIcon, EyeIcon, TrashIcon, PrinterIcon, XCircleIcon, CreditCardIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, EyeIcon, TrashIcon, PrinterIcon, XCircleIcon, CreditCardIcon, SignalIcon } from '@heroicons/react/24/outline'
 import { getOrdenes, createOrden, updateOrden, deleteOrden, getMesas, getProductos, getCategorias, getOrden, createPago } from '../services/endpoints'
+import { connectOrdersWebSocket, isEstacionPrincipal, setEstacionPrincipal } from '../services/websocket'
 import PageHeader from '../components/ui/PageHeader'
 import StatusBadge from '../components/ui/StatusBadge'
 import Modal from '../components/ui/Modal'
@@ -34,6 +35,15 @@ export default function OrdenesPage() {
   const [comensalActivo, setComensalActivo] = useState(1)
   const [persComensales, setPersComensales] = useState({}) // { 1: 'C/T', 2: 'N', ... }
 
+  // Estado para productos a granel
+  const [granelOpen, setGranelOpen] = useState(false)
+  const [granelProducto, setGranelProducto] = useState(null)
+  const [granelMonto, setGranelMonto] = useState('')
+
+  // WebSocket: estación principal
+  const [esPrincipal, setEsPrincipal] = useState(isEstacionPrincipal())
+  const wsRef = useRef(null)
+
   const PERS_OPTIONS = [
     { key: 'C/T', label: 'Con todo' },
     { key: 'C/Ci', label: 'Solo cilantro' },
@@ -62,6 +72,35 @@ export default function OrdenesPage() {
 
   useEffect(() => { fetchData() }, [filtroEstado])
 
+  // WebSocket: escuchar nuevas órdenes para auto-impresión en PC principal
+  useEffect(() => {
+    const ws = connectOrdersWebSocket((msg) => {
+      if (msg.type === 'nueva_orden') {
+        // Refrescar lista de órdenes
+        fetchData()
+
+        // Si esta es la estación principal, auto-imprimir ticket de cocina
+        if (isEstacionPrincipal() && msg.orden) {
+          toast.success(`Nueva orden ${msg.orden.numero_orden} — Imprimiendo...`, { icon: '🖨️' })
+          try {
+            printTicketOrden(msg.orden)
+          } catch {
+            // No bloquear si falla
+          }
+        }
+      }
+    })
+    wsRef.current = ws
+    return () => ws.close()
+  }, [])
+
+  const toggleEstacionPrincipal = () => {
+    const nuevo = !esPrincipal
+    setEsPrincipal(nuevo)
+    setEstacionPrincipal(nuevo)
+    toast.success(nuevo ? 'Esta PC es ahora la estación de impresión' : 'Estación de impresión desactivada')
+  }
+
   const openCreate = () => {
     setForm({ mesa_id: '', tipo: 'en_sitio', notas: '', numero_comensales: 1, detalles: [] })
     setCatSeleccionada('')
@@ -72,21 +111,53 @@ export default function OrdenesPage() {
   }
 
   const addItem = (producto) => {
+    // Si es producto a granel, abrir modal para ingresar monto
+    if (producto.es_granel) {
+      setGranelProducto(producto)
+      setGranelMonto('')
+      setGranelOpen(true)
+      return
+    }
+
     setForm((prev) => {
-      const existing = prev.detalles.find((d) => d.producto_id === producto.id && d.comensal === comensalActivo)
+      const existing = prev.detalles.find((d) => d.producto_id === producto.id && d.comensal === comensalActivo && !d._es_granel)
       if (existing) {
         return {
           ...prev,
           detalles: prev.detalles.map((d) =>
-            d.producto_id === producto.id && d.comensal === comensalActivo ? { ...d, cantidad: d.cantidad + 1 } : d
+            d.producto_id === producto.id && d.comensal === comensalActivo && !d._es_granel ? { ...d, cantidad: d.cantidad + 1 } : d
           ),
         }
       }
       return {
         ...prev,
-        detalles: [...prev.detalles, { producto_id: producto.id, cantidad: 1, notas: '', comensal: comensalActivo, _nombre: producto.nombre, _precio: producto.precio }],
+        detalles: [...prev.detalles, { producto_id: producto.id, cantidad: 1, notas: '', comensal: comensalActivo, _nombre: producto.nombre, _precio: producto.precio, _es_granel: false }],
       }
     })
+  }
+
+  const addGranelItem = () => {
+    const monto = parseFloat(granelMonto)
+    if (!monto || monto <= 0 || !granelProducto) {
+      toast.error('Ingresa un monto válido')
+      return
+    }
+    setForm((prev) => ({
+      ...prev,
+      detalles: [...prev.detalles, {
+        producto_id: granelProducto.id,
+        cantidad: 1,
+        notas: '',
+        comensal: comensalActivo,
+        _nombre: granelProducto.nombre,
+        _precio: monto,
+        _precio_unitario: monto,
+        _es_granel: true,
+      }],
+    }))
+    setGranelOpen(false)
+    setGranelProducto(null)
+    setGranelMonto('')
   }
 
   const removeItem = (productoId, comensal) => {
@@ -121,11 +192,16 @@ export default function OrdenesPage() {
         // NO enviamos numero_comensales ni comensal al backend
         detalles: form.detalles.map((d) => {
           const pers = persComensales[d.comensal] || 'C/T'
-          return { 
+          const detalle = { 
             producto_id: d.producto_id, 
             cantidad: d.cantidad, 
             notas: [pers !== 'C/T' ? pers : '', d.notas].filter(Boolean).join(' - ') || null,
           }
+          // Para productos a granel, enviar el precio_unitario
+          if (d._es_granel && d._precio_unitario) {
+            detalle.precio_unitario = d._precio_unitario
+          }
+          return detalle
         }),
       }
       const { data: nuevaOrden } = await createOrden(payload)
@@ -242,6 +318,18 @@ export default function OrdenesPage() {
   return (
     <div>
       <PageHeader title="Órdenes" subtitle={`${ordenesFiltradas.length} órdenes`}>
+        <button
+          onClick={toggleEstacionPrincipal}
+          className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+            esPrincipal
+              ? 'bg-green-100 text-green-700 ring-1 ring-green-300 hover:bg-green-200'
+              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+          }`}
+          title={esPrincipal ? 'Esta PC imprime automáticamente los tickets de cocina' : 'Activar para auto-imprimir tickets'}
+        >
+          <SignalIcon className="h-4 w-4" />
+          {esPrincipal ? '🖨️ PC Principal' : 'PC Principal'}
+        </button>
         <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-200 outline-none">
           <option value="">Activas (sin pagadas)</option>
           <option value="abierta">Solo abiertas</option>
@@ -356,9 +444,11 @@ export default function OrdenesPage() {
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-52 sm:max-h-64 overflow-y-auto pr-1">
                 {prodsFiltrados.map((prod) => (
-                  <button key={prod.id} type="button" onClick={() => addItem(prod)} className="rounded-lg border border-gray-200 p-3 sm:p-2 text-left hover:border-primary-400 hover:bg-primary-50 active:bg-primary-100 transition-colors">
+                  <button key={prod.id} type="button" onClick={() => addItem(prod)} className={`rounded-lg border p-3 sm:p-2 text-left hover:border-primary-400 hover:bg-primary-50 active:bg-primary-100 transition-colors ${prod.es_granel ? 'border-amber-300 bg-amber-50' : 'border-gray-200'}`}>
                     <p className="text-sm font-medium text-gray-900 truncate">{prod.nombre}</p>
-                    <p className="text-xs text-texano-500 font-semibold">${parseFloat(prod.precio).toFixed(2)}</p>
+                    <p className="text-xs text-texano-500 font-semibold">
+                      {prod.es_granel ? '⚖️ A granel' : `$${parseFloat(prod.precio).toFixed(2)}`}
+                    </p>
                   </button>
                 ))}
               </div>
@@ -625,6 +715,40 @@ export default function OrdenesPage() {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Modal producto a granel */}
+      <Modal open={granelOpen} onClose={() => setGranelOpen(false)} title={`${granelProducto?.nombre || 'Producto'} — Monto a cobrar`}>
+        <div className="space-y-4">
+          <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
+            <p>Este producto se vende a granel. Ingresa el monto total a cobrar.</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Monto ($)</label>
+            <input
+              type="number"
+              step="0.01"
+              min="0.01"
+              autoFocus
+              value={granelMonto}
+              onChange={(e) => setGranelMonto(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addGranelItem() } }}
+              className="w-full rounded-lg border border-gray-300 px-3 py-3 text-lg font-semibold focus:border-primary-500 focus:ring-2 focus:ring-primary-200 outline-none"
+              placeholder="Ej: 50.00"
+            />
+          </div>
+          {granelMonto && parseFloat(granelMonto) > 0 && (
+            <div className="rounded-lg bg-green-50 p-3 text-center">
+              <span className="text-2xl font-bold text-green-700">${parseFloat(granelMonto).toFixed(2)}</span>
+            </div>
+          )}
+          <div className="flex justify-end gap-3">
+            <button type="button" onClick={() => setGranelOpen(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Cancelar</button>
+            <button type="button" onClick={addGranelItem} disabled={!granelMonto || parseFloat(granelMonto) <= 0} className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50">
+              Agregar
+            </button>
+          </div>
+        </div>
       </Modal>
 
       <ConfirmDialog open={confirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleDelete} title="Eliminar orden" message={`¿Eliminar la orden #${deleting?.numero_orden}? Esta acción no se puede deshacer.`} />

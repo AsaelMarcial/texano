@@ -22,13 +22,73 @@ def get_corte(db: Session, corte_id: int) -> CorteCaja | None:
     return db.query(CorteCaja).filter(CorteCaja.id == corte_id).first()
 
 
-def get_corte_abierto(db: Session, cajero_id: int) -> CorteCaja | None:
-    """Busca si el cajero tiene un corte abierto."""
+def get_corte_abierto_global(db: Session) -> CorteCaja | None:
+    """Busca si hay un corte abierto (global, sin importar cajero)."""
     return (
         db.query(CorteCaja)
-        .filter(CorteCaja.cajero_id == cajero_id, CorteCaja.estado == "abierto")
+        .filter(CorteCaja.estado == "abierto")
         .first()
     )
+
+
+def get_corte_abierto(db: Session, cajero_id: int) -> CorteCaja | None:
+    """Busca si el cajero tiene un corte abierto (legacy, usado en router)."""
+    return get_corte_abierto_global(db)
+
+
+def _calcular_totales_corte(db: Session, corte_id: int) -> dict:
+    """Calcula los totales de ventas de un corte a partir de los pagos vinculados."""
+    pagos = (
+        db.query(Pago)
+        .filter(Pago.corte_caja_id == corte_id)
+        .all()
+    )
+
+    total_efectivo = sum(
+        p.monto for p in pagos if p.metodo_pago == "efectivo"
+    ) or Decimal("0")
+    total_tarjeta = sum(
+        p.monto for p in pagos if p.metodo_pago == "tarjeta"
+    ) or Decimal("0")
+    total_transferencia = sum(
+        p.monto for p in pagos if p.metodo_pago == "transferencia"
+    ) or Decimal("0")
+
+    total_ventas = total_efectivo + total_tarjeta + total_transferencia
+
+    return {
+        "total_efectivo": total_efectivo,
+        "total_tarjeta": total_tarjeta,
+        "total_transferencia": total_transferencia,
+        "total_ventas": total_ventas,
+        "num_pagos": len(pagos),
+    }
+
+
+def get_ventas_actuales(db: Session) -> dict:
+    """Devuelve el resumen de ventas en vivo del corte abierto actual."""
+    corte = get_corte_abierto_global(db)
+    if not corte:
+        return {
+            "corte_id": None,
+            "corte_abierto": False,
+            "fondo_inicial": Decimal("0"),
+            "total_efectivo": Decimal("0"),
+            "total_tarjeta": Decimal("0"),
+            "total_transferencia": Decimal("0"),
+            "total_ventas": Decimal("0"),
+            "total_esperado": Decimal("0"),
+            "num_pagos": 0,
+        }
+
+    totales = _calcular_totales_corte(db, corte.id)
+    return {
+        "corte_id": corte.id,
+        "corte_abierto": True,
+        "fondo_inicial": corte.fondo_inicial,
+        **totales,
+        "total_esperado": corte.fondo_inicial + totales["total_efectivo"],
+    }
 
 
 def abrir_corte(db: Session, corte_in: CorteCajaCreate, cajero_id: int) -> CorteCaja:
@@ -50,32 +110,16 @@ def cerrar_corte(
     if not db_corte or db_corte.estado != "abierto":
         return None
 
-    # Calcular totales por método de pago desde fecha_inicio
-    pagos = (
-        db.query(Pago)
-        .filter(Pago.cajero_id == db_corte.cajero_id)
-        .filter(Pago.creado_en >= db_corte.fecha_inicio)
-        .all()
-    )
+    # Calcular totales desde los pagos vinculados a este corte
+    totales = _calcular_totales_corte(db, corte_id)
 
-    total_efectivo = sum(
-        p.monto for p in pagos if p.metodo_pago == "efectivo"
-    ) or Decimal("0")
-    total_tarjeta = sum(
-        p.monto for p in pagos if p.metodo_pago == "tarjeta"
-    ) or Decimal("0")
-    total_transferencia = sum(
-        p.monto for p in pagos if p.metodo_pago == "transferencia"
-    ) or Decimal("0")
-
-    total_ventas = total_efectivo + total_tarjeta + total_transferencia
-    total_esperado = db_corte.fondo_inicial + total_efectivo
+    total_esperado = db_corte.fondo_inicial + totales["total_efectivo"]
 
     db_corte.fecha_fin = datetime.now(timezone.utc)
-    db_corte.total_ventas = total_ventas
-    db_corte.total_efectivo = total_efectivo
-    db_corte.total_tarjeta = total_tarjeta
-    db_corte.total_transferencia = total_transferencia
+    db_corte.total_ventas = totales["total_ventas"]
+    db_corte.total_efectivo = totales["total_efectivo"]
+    db_corte.total_tarjeta = totales["total_tarjeta"]
+    db_corte.total_transferencia = totales["total_transferencia"]
     db_corte.total_esperado = total_esperado
     db_corte.total_real = corte_close.total_real
     db_corte.diferencia = corte_close.total_real - total_esperado

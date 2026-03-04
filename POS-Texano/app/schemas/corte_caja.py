@@ -40,3 +40,16 @@ class CorteCajaOut(BaseModel):
 
     model_config = {"from_attributes": True}
 
+
+class VentasActualesOut(BaseModel):
+    """Resumen de ventas en vivo del corte abierto."""
+    corte_id: int | None = None
+    corte_abierto: bool = False
+    fondo_inicial: Decimal = Decimal("0")
+    total_efectivo: Decimal = Decimal("0")
+    total_tarjeta: Decimal = Decimal("0")
+    total_transferencia: Decimal = Decimal("0")
+    total_ventas: Decimal = Decimal("0")
+    total_esperado: Decimal = Decimal("0")
+    num_pagos: int = 0
+
